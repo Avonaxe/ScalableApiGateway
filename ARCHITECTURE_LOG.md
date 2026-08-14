@@ -40,8 +40,34 @@ Built a non-blocking, transparent HTTP reverse proxy using Java 21, Spring WebFl
 
 ---
 
-## Phase 2: Dynamic Routing
-**Status:** ⏳ Pending
+## Phase 2: Dynamic Routing Engine & Path Transformation
+**Status:** ✅ Completed & Verified  
+**Date Completed:** 2026-08-14
+
+### Objective Achieved
+Replaced the static downstream endpoint with a dynamic, order-aware routing engine. The gateway inspects incoming request paths, matches them against ordered route patterns using Spring's high-performance `PathPatternParser`, applies prefix stripping transformations, and dispatches to the corresponding downstream service or emits an RFC-compliant `404 Not Found`.
+
+### Key Components Implemented
+* `Route`: Domain model defining routing rules (`id`, `pathPattern`, `targetUri`, `order`, `stripPrefix`).
+* `RouteRepository` & `InMemoryRouteRepository`: Abstraction layer for fetching routes, eagerly sorted by priority (`order`).
+* `RouteMatcher`: Reactive component resolving incoming `ServerWebExchange` paths to the highest-priority matching `Route`.
+* `PathTransformer`: Non-blocking path utility that strips $N$ leading path segments while preserving query strings and trailing slashes.
+* `DynamicRoutingIntegrationTest`: Integration suite using multiple `MockWebServer` instances verifying multi-route dispatching, path rewriting, route priority precedence, and 404 error payloads.
+
+### Architecture Decision Records (ADRs)
+* **ADR-003 (Path Pattern Matching Strategy):** Selected `PathPatternParser` over regular expressions (`java.util.regex`) and AntPathMatcher. `PathPatternParser` parses URLs as structured `PathContainer` tokens, providing lower memory overhead and significantly faster evaluation in non-blocking event loops.
+* **ADR-004 (Reactive Void Stream Protection):** Enforced `.thenReturn(true)` on `Mono<Void>` response completion streams to prevent `switchIfEmpty()` fallback misfires on HTTP 200 OK empty responses.
+
+### Edge Cases Handled
+* **Unmapped Routes:** Unmatched requests instantly return HTTP `404 Not Found` with a descriptive JSON payload without hitting network I/O.
+* **Route Precedence:** Specific routes with lower `order` numbers take precedence over broad catch-all patterns (`/**`).
+* **Query Parameter Preservation:** Path segment transformations preserve raw and encoded query strings intact.
+
+### Verification Proof
+* `mvn clean verify` executed:
+  * 7/7 tests passed (3 proxy tests + 4 dynamic routing tests).
+  * Verified multi-service routing to distinct mock ports.
+  * Verified route priority resolution.
 
 ---
 

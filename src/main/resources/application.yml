@@ -2,8 +2,22 @@ server:
   port: 8080
 
 gateway:
-  downstream:
-    url: http://localhost:8081
+  routes:
+    - id: user-service
+      pathPattern: /api/v1/users/**
+      targetUri: http://localhost:8081
+      stripPrefix: 2
+      order: 1
+    - id: order-service
+      pathPattern: /api/v1/orders/**
+      targetUri: http://localhost:8082
+      stripPrefix: 2
+      order: 2
+    - id: catch-all
+      pathPattern: /api/v1/**
+      targetUri: http://localhost:8083
+      stripPrefix: 0
+      order: 100
 
 logging:
   level:

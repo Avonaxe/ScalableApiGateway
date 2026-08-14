@@ -18,6 +18,7 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,7 +30,12 @@ class ProxyIntegrationTest {
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("gateway.downstream.url", () -> "http://localhost:" + mockWebServer.getPort());
+        // Define a single catch-all test route with highest priority
+        registry.add("gateway.routes[0].id", () -> "test-route");
+        registry.add("gateway.routes[0].pathPattern", () -> "/**");
+        registry.add("gateway.routes[0].targetUri", () -> "http://localhost:" + mockWebServer.getPort());
+        registry.add("gateway.routes[0].stripPrefix", () -> "0");
+        registry.add("gateway.routes[0].order", () -> "0");
     }
 
     @BeforeAll
@@ -160,29 +166,27 @@ class ProxyIntegrationTest {
 
     @Test
     void shouldReturn502WhenDownstreamConnectionFails() {
-        String originalUrl = gatewayProperties.getDownstream().getUrl();
-        gatewayProperties.getDownstream().setUrl("http://localhost:65432");
+        gatewayProperties.getRoutes().stream()
+                .filter(r -> "test-route".equals(r.getId()))
+                .findFirst()
+                .ifPresent(r -> r.setTargetUri(URI.create("http://localhost:65432")));
 
-        try {
-            WebClient client = webClientBuilder.baseUrl("http://localhost:" + gatewayPort).build();
+        WebClient client = webClientBuilder.baseUrl("http://localhost:" + gatewayPort).build();
 
-            StepVerifier.create(
-                    client.get()
-                            .uri("/api/error")
-                            .exchangeToMono(response -> {
-                                if (response.statusCode().is2xxSuccessful()) {
-                                    return response.bodyToMono(String.class);
-                                }
-                                return Mono.just("STATUS:" + response.statusCode().value());
-                            })
-            )
-                    .assertNext(result -> {
-                        assertThat(result).isEqualTo("STATUS:502");
-                    })
-                    .verifyComplete();
-        } finally {
-            gatewayProperties.getDownstream().setUrl(originalUrl);
-        }
+        StepVerifier.create(
+                client.get()
+                        .uri("/api/error")
+                        .exchangeToMono(response -> {
+                            if (response.statusCode().is2xxSuccessful()) {
+                                return response.bodyToMono(String.class);
+                            }
+                            return Mono.just("STATUS:" + response.statusCode().value());
+                        })
+        )
+                .assertNext(result -> {
+                    assertThat(result).isEqualTo("STATUS:502");
+                })
+                .verifyComplete();
     }
 
     private record ResponseCapture(
