@@ -71,7 +71,30 @@ Replaced the static downstream endpoint with a dynamic, order-aware routing engi
 
 ---
 
-## Phase 3: Load Balancing
-**Status:** ⏳ Pending
+## Phase 3: Load Balancing Engine (Round-Robin)
+**Status:** ✅ Completed & Verified  
+**Date Completed:** 2026-08-15
+
+### Objective Achieved
+Introduced a load-balancing layer to distribute incoming traffic across multiple instances of a downstream service. Implemented a lock-free Round-Robin strategy that operates seamlessly within the reactive pipeline, gracefully handling routes with zero available instances.
+
+### Key Components Implemented
+* `LoadBalancer`: Core strategy interface for instance selection (`Mono<URI> choose(String serviceId, List<URI> instances)`).
+* `RoundRobinLoadBalancer`: Thread-safe, non-blocking implementation using `AtomicInteger` counters mapped by `serviceId`.
+* `NoInstancesAvailableException`: Custom exception mapped to a clean HTTP 503 response.
+
+### Architecture Decision Records (ADRs)
+* **ADR-005 (Lock-Free Load Balancing & Overflow Safety):** Chose `AtomicInteger` with a bitwise mask `(counter.getAndIncrement() & 0x7FFFFFFF) % size` over `ReentrantLock` or `synchronized` blocks. This prevents thread contention in the Reactor Netty event loops and completely eliminates the `Integer.MAX_VALUE` negative modulo `ArrayIndexOutOfBoundsException` trap.
+* **ADR-006 (Strategy Pattern for LB):** Decoupled the load-balancing logic from the `ProxyService` via a strict interface, allowing future implementations (e.g., Least Connections, Consistent Hashing) to be injected via Spring's DI without modifying the core proxy pipeline.
+
+### Edge Cases Handled
+* **Empty Instance Pools:** Routes configured with zero targets instantly return `503 Service Unavailable` without attempting network I/O.
+* **Backward Configuration Compatibility:** Migrated `Route` to use a list of `targetUris` while preserving parsing for existing singular `targetUri` YAML configurations.
+
+### Verification Proof
+* `mvn clean verify` executed:
+  * 9/9 integration tests passed.
+  * Verified requests strictly alternate (1 -> 2 -> 3 -> 1) across multiple MockWebServers.
+  * Verified 503 generation on empty route targets.
 
 *(etc...)*

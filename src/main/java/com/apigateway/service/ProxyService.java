@@ -1,5 +1,7 @@
 package com.apigateway.service;
 
+import com.apigateway.loadbalancer.LoadBalancer;
+import com.apigateway.loadbalancer.NoInstancesAvailableException;
 import com.apigateway.routing.matcher.RouteMatcher;
 import com.apigateway.routing.model.Route;
 import com.apigateway.routing.util.PathTransformer;
@@ -22,13 +24,16 @@ public class ProxyService {
     private final WebClient webClient;
     private final HeaderSanitization headerSanitization;
     private final RouteMatcher routeMatcher;
+    private final LoadBalancer loadBalancer;
 
     public ProxyService(WebClient gatewayWebClient,
                         HeaderSanitization headerSanitization,
-                        RouteMatcher routeMatcher) {
+                        RouteMatcher routeMatcher,
+                        LoadBalancer loadBalancer) {
         this.webClient = gatewayWebClient;
         this.headerSanitization = headerSanitization;
         this.routeMatcher = routeMatcher;
+        this.loadBalancer = loadBalancer;
     }
 
     public Mono<Void> proxy(ServerWebExchange exchange) {
@@ -39,23 +44,41 @@ public class ProxyService {
     }
 
     private Mono<Void> proxyToRoute(ServerWebExchange exchange, Route route) {
-        URI targetUri = buildTargetUri(exchange, route);
+        String path = exchange.getRequest().getPath().pathWithinApplication().value();
+        String query = exchange.getRequest().getURI().getRawQuery();
+        String transformedPath = PathTransformer.transform(path, route.getStripPrefix());
 
-        return webClient.method(exchange.getRequest().getMethod())
-                .uri(targetUri)
-                .headers(headers -> headers.addAll(
-                        headerSanitization.filter(exchange.getRequest().getHeaders())
-                ))
-                .body(BodyInserters.fromDataBuffers(exchange.getRequest().getBody()))
-                .exchangeToMono(clientResponse -> {
-                    exchange.getResponse().setStatusCode(clientResponse.statusCode());
-                    var filteredResponseHeaders = headerSanitization.filter(
-                            clientResponse.headers().asHttpHeaders()
-                    );
-                    exchange.getResponse().getHeaders().addAll(filteredResponseHeaders);
-                    return exchange.getResponse().writeWith(clientResponse.bodyToFlux(DataBuffer.class));
-                })
+        return loadBalancer.choose(route.getId(), route.getTargetUris())
+                .map(selectedUri -> buildTargetUri(selectedUri, transformedPath, query))
+                .flatMap(targetUri -> webClient.method(exchange.getRequest().getMethod())
+                        .uri(targetUri)
+                        .headers(headers -> headers.addAll(
+                                headerSanitization.filter(exchange.getRequest().getHeaders())
+                        ))
+                        .body(BodyInserters.fromDataBuffers(exchange.getRequest().getBody()))
+                        .exchangeToMono(clientResponse -> {
+                            exchange.getResponse().setStatusCode(clientResponse.statusCode());
+                            var filteredResponseHeaders = headerSanitization.filter(
+                                    clientResponse.headers().asHttpHeaders()
+                            );
+                            exchange.getResponse().getHeaders().addAll(filteredResponseHeaders);
+                            return exchange.getResponse().writeWith(clientResponse.bodyToFlux(DataBuffer.class));
+                        }))
+                .onErrorResume(NoInstancesAvailableException.class, ex -> renderServiceUnavailable(exchange, ex.getServiceId()))
                 .onErrorResume(throwable -> renderBadGateway(exchange));
+    }
+
+    private URI buildTargetUri(URI baseUri, String path, String query) {
+        String base = baseUri.toString();
+        if (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        StringBuilder targetUrl = new StringBuilder(base);
+        targetUrl.append(path);
+        if (query != null && !query.isEmpty()) {
+            targetUrl.append("?").append(query);
+        }
+        return URI.create(targetUrl.toString());
     }
 
     private Mono<Void> renderNotFound(ServerWebExchange exchange) {
@@ -80,24 +103,15 @@ public class ProxyService {
         return exchange.getResponse().writeWith(Mono.just(buffer));
     }
 
-    private URI buildTargetUri(ServerWebExchange exchange, Route route) {
-        String path = exchange.getRequest().getPath().pathWithinApplication().value();
-        String query = exchange.getRequest().getURI().getRawQuery();
-
-        String transformedPath = PathTransformer.transform(path, route.getStripPrefix());
-
-        String base = route.getTargetUri().toString();
-        if (base.endsWith("/")) {
-            base = base.substring(0, base.length() - 1);
-        }
-
-        StringBuilder targetUrl = new StringBuilder(base);
-        targetUrl.append(transformedPath);
-
-        if (query != null && !query.isEmpty()) {
-            targetUrl.append("?").append(query);
-        }
-
-        return URI.create(targetUrl.toString());
+    private Mono<Void> renderServiceUnavailable(ServerWebExchange exchange, String serviceId) {
+        exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        String body = String.format(
+                "{\"error\":\"Service Unavailable\",\"message\":\"No instances available for service: %s\"}",
+                serviceId
+        );
+        DataBuffer buffer = exchange.getResponse().bufferFactory()
+                .wrap(body.getBytes(StandardCharsets.UTF_8));
+        return exchange.getResponse().writeWith(Mono.just(buffer));
     }
 }

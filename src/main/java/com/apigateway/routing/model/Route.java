@@ -1,17 +1,16 @@
 package com.apigateway.routing.model;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Route {
 
     private String id;
     private String pathPattern;
-    private URI targetUri;
+    private List<URI> targetUris = new ArrayList<>();
     private int order;
     private int stripPrefix;
-
-    public Route() {
-    }
 
     public String getId() {
         return id;
@@ -29,12 +28,12 @@ public class Route {
         this.pathPattern = pathPattern;
     }
 
-    public URI getTargetUri() {
-        return targetUri;
+    public List<URI> getTargetUris() {
+        return targetUris;
     }
 
-    public void setTargetUri(URI targetUri) {
-        this.targetUri = targetUri;
+    public void setTargetUris(List<URI> targetUris) {
+        this.targetUris = targetUris;
     }
 
     public int getOrder() {
@@ -51,5 +50,17 @@ public class Route {
 
     public void setStripPrefix(int stripPrefix) {
         this.stripPrefix = stripPrefix;
+    }
+
+    // Backward compatibility for single-target-uri configurations
+    public URI getTargetUri() {
+        return targetUris.isEmpty() ? null : targetUris.get(0);
+    }
+
+    public void setTargetUri(URI targetUri) {
+        this.targetUris = new ArrayList<>();
+        if (targetUri != null) {
+            this.targetUris.add(targetUri);
+        }
     }
 }

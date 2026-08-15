@@ -5,7 +5,10 @@ gateway:
   routes:
     - id: user-service
       pathPattern: /api/v1/users/**
-      targetUri: http://localhost:8081
+      targetUris:
+        - http://localhost:8081
+        - http://localhost:8082
+        - http://localhost:8083
       stripPrefix: 2
       order: 1
     - id: order-service
