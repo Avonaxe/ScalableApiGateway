@@ -150,3 +150,30 @@ Transformed the Gateway from a stateless proxy into a stateful, distributed syst
 * `mvn clean verify` executed.
 * `RateLimiterIntegrationTest` executed via Testcontainers (spins up isolated `redis:7-alpine` Docker instance).
 * Verified that configuring a `burstCapacity` of 2 correctly allows 2 concurrent requests through while explicitly rejecting the 3rd concurrent request with HTTP 429.
+
+---
+
+## Phase 6: Architectural Refactoring & JWT Authentication
+**Status:** ✅ Completed & Verified  
+**Date Completed:** 2026-08-15
+
+### Objective Achieved
+Refactored the Gateway filter chain to execute Route Resolution at the highest precedence, ensuring all subsequent filters (like Rate Limiting) have access to route-specific configurations. Implemented a custom JWT Authentication filter that acts as a gatekeeper, verifying cryptographic signatures and expirations before allowing traffic into the internal network.
+
+### Key Components Implemented
+* `RouteMatchingFilter`: Extracts routing logic out of the proxy service and places it at the front of the `GatewayFilterChain` (Order: 0). Stores the resolved `Route` in the exchange attributes.
+* `JwtAuthFilter`: Intercepts requests for routes flagged with `requiresAuth: true`. Validates the `Authorization: Bearer <token>` header, immediately returning HTTP 401 Unauthorized for missing or invalid tokens.
+* `JwtUtil`: Cryptographic utility for HMAC-SHA256 token generation and validation.
+
+### Architecture Decision Records (ADRs)
+* **ADR-011 (Route Resolution Precedence):** Moved Route Resolution to the very first step in the middleware pipeline. This architectural fix ensures that cross-cutting concerns (Rate Limiting, Authentication) can apply varying rules based on the matched destination route.
+* **ADR-012 (Native JWT Validation):** Implemented native JWT validation using `jjwt` instead of relying on heavy frameworks like Spring Security. This keeps the gateway lightweight, strictly non-blocking, and focused purely on token validation rather than complex session or role-based access control.
+
+### Edge Cases Handled
+* **The Reactive Void Trap:** Implemented `.then(Mono.just(true))` projections in the `RouteMatchingFilter` to prevent `.switchIfEmpty()` fallbacks from eagerly firing on successful `Mono<Void>` completions, which previously caused `UnsupportedOperationException` and dropped TCP connections.
+* **Committed Response Guards:** Added `isCommitted()` checks to all error renderers (404, 502, 503) to prevent double-writing headers if a downstream failure occurs mid-stream.
+
+### Verification Proof
+* `mvn clean verify` executed (15/15 tests passing).
+* Verified `JwtAuthIntegrationTest`: requests without tokens yield 401; invalid tokens yield 401; valid tokens yield 200.
+* Verified `RateLimiterIntegrationTest` successfully applies limits utilizing the newly refactored route resolution.

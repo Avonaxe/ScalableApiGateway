@@ -2,7 +2,10 @@ server:
   port: 8080
 
 gateway:
+  rate-limit:
+    enabled: true
   health-check:
+    enabled: true
     interval: 10s
     timeout: 2s
   routes:
@@ -15,6 +18,9 @@ gateway:
       healthCheckPath: /actuator/health
       stripPrefix: 2
       order: 1
+      replenishRate: 1
+      burstCapacity: 2
+      requiresAuth: true
     - id: order-service
       pathPattern: /api/v1/orders/**
       targetUri: http://localhost:8082

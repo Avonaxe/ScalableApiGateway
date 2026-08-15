@@ -2,7 +2,7 @@ package com.apigateway.filter.ratelimit;
 
 import com.apigateway.filter.GatewayFilter;
 import com.apigateway.filter.GatewayFilterChain;
-import com.apigateway.routing.matcher.RouteMatcher;
+import com.apigateway.filter.routing.RouteMatchingFilter;
 import com.apigateway.routing.model.Route;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
@@ -50,27 +50,21 @@ public class RedisRateLimitFilter implements GatewayFilter, Ordered {
             end
             """;
 
-    private final RouteMatcher routeMatcher;
     private final ReactiveRedisTemplate<String, String> redisTemplate;
     private final RedisScript<Long> rateLimitScript;
 
-    public RedisRateLimitFilter(RouteMatcher routeMatcher,
-                                ReactiveRedisTemplate<String, String> redisTemplate) {
-        this.routeMatcher = routeMatcher;
+    public RedisRateLimitFilter(ReactiveRedisTemplate<String, String> redisTemplate) {
         this.redisTemplate = redisTemplate;
         this.rateLimitScript = new DefaultRedisScript<>(TOKEN_BUCKET_LUA, Long.class);
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        return routeMatcher.match(exchange)
-                .flatMap(route -> {
-                    if (route.getReplenishRate() > 0 && route.getBurstCapacity() > 0) {
-                        return applyRateLimit(exchange, route, chain);
-                    }
-                    return chain.filter(exchange);
-                })
-                .switchIfEmpty(chain.filter(exchange));
+        Route route = exchange.getAttribute(RouteMatchingFilter.GATEWAY_ROUTE_ATTR);
+        if (route == null || route.getReplenishRate() <= 0 || route.getBurstCapacity() <= 0) {
+            return chain.filter(exchange);
+        }
+        return applyRateLimit(exchange, route, chain);
     }
 
     private Mono<Void> applyRateLimit(ServerWebExchange exchange, Route route, GatewayFilterChain chain) {
@@ -114,6 +108,6 @@ public class RedisRateLimitFilter implements GatewayFilter, Ordered {
 
     @Override
     public int getOrder() {
-        return Ordered.HIGHEST_PRECEDENCE;
+        return 20;
     }
 }

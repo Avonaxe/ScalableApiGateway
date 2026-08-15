@@ -1,9 +1,9 @@
 package com.apigateway.service;
 
+import com.apigateway.filter.routing.RouteMatchingFilter;
 import com.apigateway.health.HealthMonitor;
 import com.apigateway.loadbalancer.LoadBalancer;
 import com.apigateway.loadbalancer.NoInstancesAvailableException;
-import com.apigateway.routing.matcher.RouteMatcher;
 import com.apigateway.routing.model.Route;
 import com.apigateway.routing.util.PathTransformer;
 import com.apigateway.util.HeaderSanitization;
@@ -25,30 +25,27 @@ public class ProxyService {
 
     private final WebClient webClient;
     private final HeaderSanitization headerSanitization;
-    private final RouteMatcher routeMatcher;
     private final LoadBalancer loadBalancer;
     private final HealthMonitor healthMonitor;
 
     public ProxyService(WebClient gatewayWebClient,
                         HeaderSanitization headerSanitization,
-                        RouteMatcher routeMatcher,
                         LoadBalancer loadBalancer,
                         HealthMonitor healthMonitor) {
         this.webClient = gatewayWebClient;
         this.headerSanitization = headerSanitization;
-        this.routeMatcher = routeMatcher;
         this.loadBalancer = loadBalancer;
         this.healthMonitor = healthMonitor;
     }
 
     public Mono<Void> proxy(ServerWebExchange exchange) {
-        return routeMatcher.match(exchange)
-                .flatMap(route -> {
-                    List<URI> healthyInstances = healthMonitor.filterHealthy(route.getTargetUris());
-                    return proxyToRoute(exchange, route, healthyInstances).thenReturn(true);
-                })
-                .switchIfEmpty(Mono.defer(() -> renderNotFound(exchange).thenReturn(true)))
-                .then();
+        Route route = exchange.getAttribute(RouteMatchingFilter.GATEWAY_ROUTE_ATTR);
+        if (route == null) {
+            // Should not happen if RouteMatchingFilter is in the chain, but defensive
+            return renderNotFound(exchange);
+        }
+        List<URI> healthyInstances = healthMonitor.filterHealthy(route.getTargetUris());
+        return proxyToRoute(exchange, route, healthyInstances);
     }
 
     private Mono<Void> proxyToRoute(ServerWebExchange exchange, Route route, List<URI> instances) {
@@ -103,6 +100,9 @@ public class ProxyService {
     }
 
     private Mono<Void> renderBadGateway(ServerWebExchange exchange) {
+        if (exchange.getResponse().isCommitted()) {
+            return Mono.empty();
+        }
         exchange.getResponse().setStatusCode(HttpStatus.BAD_GATEWAY);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
         String errorJson = "{\"error\":\"Bad Gateway\",\"message\":\"The downstream service is unavailable or returned an invalid response\"}";
@@ -112,6 +112,9 @@ public class ProxyService {
     }
 
     private Mono<Void> renderServiceUnavailable(ServerWebExchange exchange, String serviceId) {
+        if (exchange.getResponse().isCommitted()) {
+            return Mono.empty();
+        }
         exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
         String body = String.format(

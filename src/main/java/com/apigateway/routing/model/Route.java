@@ -14,6 +14,7 @@ public class Route {
     private String healthCheckPath = "/actuator/health";
     private int replenishRate = 0;
     private int burstCapacity = 0;
+    private boolean requiresAuth = false;
 
     public String getId() {
         return id;
@@ -77,6 +78,14 @@ public class Route {
 
     public void setBurstCapacity(int burstCapacity) {
         this.burstCapacity = burstCapacity;
+    }
+
+    public boolean isRequiresAuth() {
+        return requiresAuth;
+    }
+
+    public void setRequiresAuth(boolean requiresAuth) {
+        this.requiresAuth = requiresAuth;
     }
 
     // Backward compatibility for single-target-uri configurations
