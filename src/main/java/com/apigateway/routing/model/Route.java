@@ -11,6 +11,7 @@ public class Route {
     private List<URI> targetUris = new ArrayList<>();
     private int order;
     private int stripPrefix;
+    private String healthCheckPath = "/actuator/health";
 
     public String getId() {
         return id;
@@ -50,6 +51,14 @@ public class Route {
 
     public void setStripPrefix(int stripPrefix) {
         this.stripPrefix = stripPrefix;
+    }
+
+    public String getHealthCheckPath() {
+        return healthCheckPath;
+    }
+
+    public void setHealthCheckPath(String healthCheckPath) {
+        this.healthCheckPath = healthCheckPath;
     }
 
     // Backward compatibility for single-target-uri configurations

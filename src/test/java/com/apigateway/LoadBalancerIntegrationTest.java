@@ -27,6 +27,7 @@ class LoadBalancerIntegrationTest {
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
+        registry.add("gateway.health-check.enabled", () -> "false");
         // Route 0: multi-instance user service
         registry.add("gateway.routes[0].id", () -> "lb-user-service");
         registry.add("gateway.routes[0].pathPattern", () -> "/api/v1/users/**");

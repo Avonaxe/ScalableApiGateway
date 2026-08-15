@@ -30,6 +30,7 @@ class ProxyIntegrationTest {
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
+        registry.add("gateway.health-check.enabled", () -> "false");
         // Define a single catch-all test route with highest priority
         registry.add("gateway.routes[0].id", () -> "test-route");
         registry.add("gateway.routes[0].pathPattern", () -> "/**");

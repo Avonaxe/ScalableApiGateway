@@ -2,6 +2,9 @@ server:
   port: 8080
 
 gateway:
+  health-check:
+    interval: 10s
+    timeout: 2s
   routes:
     - id: user-service
       pathPattern: /api/v1/users/**
@@ -9,6 +12,7 @@ gateway:
         - http://localhost:8081
         - http://localhost:8082
         - http://localhost:8083
+      healthCheckPath: /actuator/health
       stripPrefix: 2
       order: 1
     - id: order-service

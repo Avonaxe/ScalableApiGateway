@@ -1,5 +1,6 @@
 package com.apigateway.service;
 
+import com.apigateway.health.HealthMonitor;
 import com.apigateway.loadbalancer.LoadBalancer;
 import com.apigateway.loadbalancer.NoInstancesAvailableException;
 import com.apigateway.routing.matcher.RouteMatcher;
@@ -17,6 +18,7 @@ import reactor.core.publisher.Mono;
 
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Service
 public class ProxyService {
@@ -25,30 +27,36 @@ public class ProxyService {
     private final HeaderSanitization headerSanitization;
     private final RouteMatcher routeMatcher;
     private final LoadBalancer loadBalancer;
+    private final HealthMonitor healthMonitor;
 
     public ProxyService(WebClient gatewayWebClient,
                         HeaderSanitization headerSanitization,
                         RouteMatcher routeMatcher,
-                        LoadBalancer loadBalancer) {
+                        LoadBalancer loadBalancer,
+                        HealthMonitor healthMonitor) {
         this.webClient = gatewayWebClient;
         this.headerSanitization = headerSanitization;
         this.routeMatcher = routeMatcher;
         this.loadBalancer = loadBalancer;
+        this.healthMonitor = healthMonitor;
     }
 
     public Mono<Void> proxy(ServerWebExchange exchange) {
         return routeMatcher.match(exchange)
-                .flatMap(route -> proxyToRoute(exchange, route).thenReturn(true))
+                .flatMap(route -> {
+                    List<URI> healthyInstances = healthMonitor.filterHealthy(route.getTargetUris());
+                    return proxyToRoute(exchange, route, healthyInstances).thenReturn(true);
+                })
                 .switchIfEmpty(Mono.defer(() -> renderNotFound(exchange).thenReturn(true)))
                 .then();
     }
 
-    private Mono<Void> proxyToRoute(ServerWebExchange exchange, Route route) {
+    private Mono<Void> proxyToRoute(ServerWebExchange exchange, Route route, List<URI> instances) {
         String path = exchange.getRequest().getPath().pathWithinApplication().value();
         String query = exchange.getRequest().getURI().getRawQuery();
         String transformedPath = PathTransformer.transform(path, route.getStripPrefix());
 
-        return loadBalancer.choose(route.getId(), route.getTargetUris())
+        return loadBalancer.choose(route.getId(), instances)
                 .map(selectedUri -> buildTargetUri(selectedUri, transformedPath, query))
                 .flatMap(targetUri -> webClient.method(exchange.getRequest().getMethod())
                         .uri(targetUri)

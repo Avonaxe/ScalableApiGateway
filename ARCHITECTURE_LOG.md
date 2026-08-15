@@ -97,4 +97,29 @@ Introduced a load-balancing layer to distribute incoming traffic across multiple
   * Verified requests strictly alternate (1 -> 2 -> 3 -> 1) across multiple MockWebServers.
   * Verified 503 generation on empty route targets.
 
-*(etc...)*
+---
+
+## Phase 4: Active Health Checking
+**Status:** ✅ Completed & Verified  
+**Date Completed:** 2026-08-15
+
+### Objective Achieved
+Introduced a background supervisor to continuously monitor downstream instance health. The gateway actively pings a configurable health endpoint (e.g., `/actuator/health`) on all target URIs at a defined interval. Unhealthy instances are automatically evicted from the load balancer rotation, preventing traffic from reaching unresponsive servers.
+
+### Key Components Implemented
+* `HealthMonitor`: Background service executing periodic, non-blocking health checks using `WebClient` on a `boundedElastic` scheduler. Maintains a thread-safe `ConcurrentHashMap` of instance statuses.
+* `Route` enhancements: Added `healthCheckPath` to allow per-service health endpoint configuration.
+* `HealthCheckIntegrationTest`: Validates that a server returning HTTP 500 on its health endpoint receives zero proxy traffic from the load balancer.
+
+### Architecture Decision Records (ADRs)
+* **ADR-007 (Optimistic Health Default):** By default, instances are assumed healthy (`true`) upon gateway startup. This prevents a "cold-start storm" where the gateway rejects all traffic with 503s while waiting for the first asynchronous health check sweep to complete.
+* **ADR-008 (Scheduler Isolation):** Health-check intervals are scheduled on `Schedulers.boundedElastic()` rather than the main Netty event loop (`Schedulers.parallel()`) to ensure that polling overhead or timeout stalls do not degrade the latency of inbound client request processing.
+
+### Edge Cases Handled
+* **Timeout Protection:** Health checks enforce a strict reactive timeout (default 2s) to ensure unresponsive servers are quickly flagged as offline.
+* **Graceful Teardown:** Bound the health-check `Disposable` subscription to the Spring lifecycle (`@PreDestroy`) to prevent thread leakage upon shutdown.
+
+### Verification Proof
+* `mvn clean verify` executed:
+  * 10/10 integration tests passed.
+  * Verified that traffic routes exclusively to healthy instances, dynamically bypassing instances that fail their active health checks.

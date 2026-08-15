@@ -31,6 +31,8 @@ class DynamicRoutingIntegrationTest {
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
+        registry.add("gateway.health-check.enabled", () -> "false");
+
         // Route 0: user-service
         registry.add("gateway.routes[0].id", () -> "user-service");
         registry.add("gateway.routes[0].pathPattern", () -> "/api/v1/users/**");
