@@ -15,6 +15,7 @@ public class Route {
     private int replenishRate = 0;
     private int burstCapacity = 0;
     private boolean requiresAuth = false;
+    private boolean circuitBreakerEnabled = false;
 
     public String getId() {
         return id;
@@ -86,6 +87,14 @@ public class Route {
 
     public void setRequiresAuth(boolean requiresAuth) {
         this.requiresAuth = requiresAuth;
+    }
+
+    public boolean isCircuitBreakerEnabled() {
+        return circuitBreakerEnabled;
+    }
+
+    public void setCircuitBreakerEnabled(boolean circuitBreakerEnabled) {
+        this.circuitBreakerEnabled = circuitBreakerEnabled;
     }
 
     // Backward compatibility for single-target-uri configurations

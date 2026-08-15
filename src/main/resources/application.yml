@@ -21,6 +21,7 @@ gateway:
       replenishRate: 1
       burstCapacity: 2
       requiresAuth: true
+      circuitBreakerEnabled: true
     - id: order-service
       pathPattern: /api/v1/orders/**
       targetUri: http://localhost:8082
@@ -31,6 +32,18 @@ gateway:
       targetUri: http://localhost:8083
       stripPrefix: 0
       order: 100
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 2
+    instances:
+      user-service:
+        baseConfig: default
 
 logging:
   level:
