@@ -12,6 +12,8 @@ public class Route {
     private int order;
     private int stripPrefix;
     private String healthCheckPath = "/actuator/health";
+    private int replenishRate = 0;
+    private int burstCapacity = 0;
 
     public String getId() {
         return id;
@@ -59,6 +61,22 @@ public class Route {
 
     public void setHealthCheckPath(String healthCheckPath) {
         this.healthCheckPath = healthCheckPath;
+    }
+
+    public int getReplenishRate() {
+        return replenishRate;
+    }
+
+    public void setReplenishRate(int replenishRate) {
+        this.replenishRate = replenishRate;
+    }
+
+    public int getBurstCapacity() {
+        return burstCapacity;
+    }
+
+    public void setBurstCapacity(int burstCapacity) {
+        this.burstCapacity = burstCapacity;
     }
 
     // Backward compatibility for single-target-uri configurations

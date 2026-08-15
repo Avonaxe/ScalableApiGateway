@@ -123,3 +123,30 @@ Introduced a background supervisor to continuously monitor downstream instance h
 * `mvn clean verify` executed:
   * 10/10 integration tests passed.
   * Verified that traffic routes exclusively to healthy instances, dynamically bypassing instances that fail their active health checks.
+
+  ---
+
+  ## Phase 5: Distributed Rate Limiting (Redis Token Bucket)
+**Status:** ✅ Completed & Verified  
+**Date Completed:** 2026-08-15
+
+### Objective Achieved
+Transformed the Gateway from a stateless proxy into a stateful, distributed system. Implemented a pluggable middleware filter chain and introduced a Redis-backed Token Bucket rate limiter. This protects backend microservices from traffic spikes by enforcing precise, per-route and per-client-IP traffic limits across all horizontally scaled gateway instances.
+
+### Key Components Implemented
+* `GatewayFilter` / `GatewayFilterChain`: Pluggable middleware architecture (Chain of Responsibility pattern) for intercepting requests before they reach the proxy.
+* `RedisRateLimitFilter`: Intercepts traffic and evaluates limits using a custom Redis Lua script. Injects `X-RateLimit-Remaining` headers or terminates the chain with an HTTP `429 Too Many Requests`.
+* **Token Bucket Lua Script:** Calculates exact token replenishment based on millisecond elapsed time, tracking fractional tokens atomically inside Redis to prevent race conditions.
+
+### Architecture Decision Records (ADRs)
+* **ADR-009 (Pluggable Filter Chain):** Decoupled request inspection from proxy execution. All cross-cutting concerns (rate limiting, auth, caching) must now implement `GatewayFilter`, ensuring the core proxy transport layer remains untouched.
+* **ADR-010 (Redis Lua Scripting for Concurrency):** Rate limit math (Read timestamp -> Calculate elapsed -> Decrement -> Write back) is executed as a single Lua script inside Redis. This guarantees atomic evaluation, preventing race conditions when multiple gateway replicas process requests simultaneously.
+
+### Edge Cases Handled
+* **IP Spoofing Protection:** The filter extracts the client IP strictly from the first hop of the `X-Forwarded-For` header, falling back to the raw `RemoteAddress` if no proxy exists.
+* **Opt-In Degradation:** The Redis filter is annotated with `@ConditionalOnProperty`. If Redis is unavailable in an environment, rate limiting can be safely disabled without crashing the gateway.
+
+### Verification Proof
+* `mvn clean verify` executed.
+* `RateLimiterIntegrationTest` executed via Testcontainers (spins up isolated `redis:7-alpine` Docker instance).
+* Verified that configuring a `burstCapacity` of 2 correctly allows 2 concurrent requests through while explicitly rejecting the 3rd concurrent request with HTTP 429.
