@@ -1,0 +1,98 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: apigateway-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - gateway-net
+
+  user-service-1:
+    image: mccutchen/go-httpbin:v2.15.0
+    container_name: apigateway-user-service-1
+    networks:
+      - gateway-net
+
+  user-service-2:
+    image: mccutchen/go-httpbin:v2.15.0
+    container_name: apigateway-user-service-2
+    networks:
+      - gateway-net
+
+  user-service-3:
+    image: mccutchen/go-httpbin:v2.15.0
+    container_name: apigateway-user-service-3
+    networks:
+      - gateway-net
+
+  user-service-4:
+    image: mccutchen/go-httpbin:v2.15.0
+    container_name: apigateway-user-service-4
+    networks:
+      - gateway-net
+
+  user-service-5:
+    image: mccutchen/go-httpbin:v2.15.0
+    container_name: apigateway-user-service-5
+    networks:
+      - gateway-net
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apigateway-api
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+      user-service-1:
+        condition: service_started
+      user-service-2:
+        condition: service_started
+      user-service-3:
+        condition: service_started
+      user-service-4:
+        condition: service_started
+      user-service-5:
+        condition: service_started
+    environment:
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - GATEWAY_ROUTES_0_ID=user-service
+      - GATEWAY_ROUTES_0_PATHPATTERN=/api/v1/users/**
+      - GATEWAY_ROUTES_0_TARGETURIS_0=http://user-service-1:8080
+      - GATEWAY_ROUTES_0_TARGETURIS_1=http://user-service-2:8080
+      - GATEWAY_ROUTES_0_TARGETURIS_2=http://user-service-3:8080
+      - GATEWAY_ROUTES_0_TARGETURIS_3=http://user-service-4:8080
+      - GATEWAY_ROUTES_0_TARGETURIS_4=http://user-service-5:8080
+      - GATEWAY_ROUTES_0_STRIPPREFIX=3
+      - GATEWAY_ROUTES_0_HEALTHCHECKPATH=/health
+      - GATEWAY_ROUTES_0_REQUIRESAUTH=true
+      - GATEWAY_ROUTES_0_CIRCUITBREAKERENABLED=true
+      - GATEWAY_ROUTES_0_REPLENISHRATE=1
+      - GATEWAY_ROUTES_0_BURSTCAPACITY=2
+      - GATEWAY_ROUTES_1_ID=order-service
+      - GATEWAY_ROUTES_1_PATHPATTERN=/api/v1/orders/**
+      - GATEWAY_ROUTES_1_TARGETURI=http://user-service-1:8080
+      - GATEWAY_ROUTES_1_STRIPPREFIX=3
+      - GATEWAY_ROUTES_2_ID=catch-all
+      - GATEWAY_ROUTES_2_PATHPATTERN=/api/v1/**
+      - GATEWAY_ROUTES_2_TARGETURI=http://user-service-1:8080
+      - GATEWAY_ROUTES_2_STRIPPREFIX=2
+      - GATEWAY_HEALTH_CHECK_ENABLED=false
+      - GATEWAY_HEALTH_CHECK_INTERVAL=10s
+      - GATEWAY_HEALTH_CHECK_TIMEOUT=2s
+      - GATEWAY_RATE_LIMIT_ENABLED=true
+    networks:
+      - gateway-net
+
+networks:
+  gateway-net:
+    driver: bridge
