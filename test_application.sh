@@ -110,5 +110,5 @@ echo -e "${GREEN}SUCCESS: Circuit Breaker successfully caught the failure and se
 # END OF TESTS
 # ------------------------------------------------------------------------------
 echo -e "${CYAN}====================================================${NC}"
-echo -e "${CYAN}    All Tests Completed Successfully!               ${NC}"
+echo -e "${CYAN}    All Tests Completed Successfully via Jenkins CI/CD! 🚀 ${NC}"
 echo -e "${CYAN}====================================================${NC}"
