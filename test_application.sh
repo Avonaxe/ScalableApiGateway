@@ -35,7 +35,7 @@ echo ""
 # 2. TEST UNAUTHORIZED ACCESS (401)
 # ------------------------------------------------------------------------------
 echo -e "${YELLOW}--- [2] Testing JWT Security (Expected: 401 Unauthorized) ---${NC}"
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/v1/users/get)
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://172.17.0.1:8080/api/v1/users/get)
 if [ "$STATUS" -eq 401 ]; then
     echo -e "${GREEN}SUCCESS: Unauthorized request properly blocked (401)${NC}\n"
 else
@@ -46,7 +46,7 @@ fi
 # 3. TEST AUTHORIZED ROUTING (200)
 # ------------------------------------------------------------------------------
 echo -e "${YELLOW}--- [3] Testing Routing & Proxying (Expected: 200 OK) ---${NC}"
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/users/get)
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://172.17.0.1:8080/api/v1/users/get)
 if [ "$STATUS" -eq 200 ]; then
     echo -e "${GREEN}SUCCESS: Request authenticated and routed successfully (200)${NC}\n"
 else
@@ -62,7 +62,7 @@ docker exec apigateway-redis redis-cli FLUSHALL > /dev/null 2>&1 || true
 
 echo "Sending 5 requests with 1-second delays (to avoid Rate Limiter interference)..."
 for i in {1..5}; do
-  curl -s -o /dev/null -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/users/get
+  curl -s -o /dev/null -H "Authorization: Bearer $TOKEN" http://172.17.0.1:8080/api/v1/users/get
   sleep 1
 done
 
@@ -81,7 +81,7 @@ docker exec apigateway-redis redis-cli FLUSHALL > /dev/null 2>&1 || true
 
 echo "Sending a rapid burst of 10 requests..."
 for i in {1..10}; do
-  curl -s -o /dev/null -w "%{http_code} " -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/users/get
+  curl -s -o /dev/null -w "%{http_code} " -H "Authorization: Bearer $TOKEN" http://172.17.0.1:8080/api/v1/users/get
 done
 echo -e "\n${GREEN}SUCCESS: You should see 200s transition into 429s as the bucket empties.${NC}\n"
 
@@ -96,10 +96,10 @@ docker compose stop user-service-1 user-service-2 user-service-3 user-service-4 
 
 echo "Firing request to offline backends..."
 echo -n "Fallback JSON Response: "
-curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/users/get
+curl -s -H "Authorization: Bearer $TOKEN" http://172.17.0.1:8080/api/v1/users/get
 echo ""
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/users/get)
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $TOKEN" http://172.17.0.1:8080/api/v1/users/get)
 echo -e "HTTP Status Code: ${GREEN}$STATUS${NC}"
 
 echo "Bringing services back online..."
