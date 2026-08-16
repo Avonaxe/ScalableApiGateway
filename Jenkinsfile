@@ -6,13 +6,6 @@ pipeline {
         APP_NAME = "api-gateway"
     }
 
-    tools {
-        // These names must match what you name them in Jenkins > Global Tool Configuration
-        // If you are running Jenkins locally with Maven/Java installed on the host, you might not need this block.
-        maven 'Maven' 
-        jdk 'Java21'
-    }
-
     stages {
         stage('Checkout') {
             steps {
